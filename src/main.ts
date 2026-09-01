@@ -171,6 +171,7 @@ const previewCanvas = getElement<HTMLCanvasElement>('preview-canvas');
 const previewLoading = getElement<HTMLDivElement>('preview-loading');
 
 let pdf: PDFDocumentProxy | null = null;
+let destroyCurrentPdf: (() => Promise<void>) | null = null;
 let currentFileName = '';
 let currentPage = 1;
 let previewSource: ImageData | null = null;
@@ -310,6 +311,7 @@ async function renderPreview(): Promise<void> {
     previewCanvas.height = Math.max(1, Math.ceil(viewport.height));
 
     await page.render({
+      canvas: previewCanvas,
       canvasContext: context,
       viewport,
       background: '#FFFFFF',
@@ -347,14 +349,16 @@ async function loadPdf(file: File): Promise<void> {
   workspace.hidden = true;
 
   try {
-    if (pdf) {
-      await pdf.destroy();
+    if (destroyCurrentPdf) {
+      await destroyCurrentPdf();
+      destroyCurrentPdf = null;
       pdf = null;
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
     const loadingTask = pdfjsLib.getDocument({ data: bytes });
     pdf = await loadingTask.promise;
+    destroyCurrentPdf = () => loadingTask.destroy();
     currentFileName = file.name;
     currentPage = 1;
 
@@ -442,6 +446,7 @@ async function convertPdf(): Promise<void> {
       renderCanvas.height = Math.max(1, Math.ceil(viewport.height));
 
       await sourcePage.render({
+        canvas: renderCanvas,
         canvasContext: context,
         viewport,
         background: '#FFFFFF',

@@ -13,6 +13,10 @@ type RenderOptions = {
   background?: string;
 };
 
+type PdfiumHeap = {
+  HEAPU8: Uint8Array;
+};
+
 export type PdfPage = {
   getViewport(options: { scale: number }): PdfViewport;
   render(options: RenderOptions): { promise: Promise<void> };
@@ -43,6 +47,10 @@ async function getPdfium(): Promise<WrappedPdfiumModule> {
   return pdfiumPromise;
 }
 
+function getHeap(pdfium: WrappedPdfiumModule): Uint8Array {
+  return (pdfium.pdfium as unknown as PdfiumHeap).HEAPU8;
+}
+
 function pdfErrorMessage(code: number): string {
   switch (code) {
     case 1:
@@ -64,10 +72,11 @@ function pdfErrorMessage(code: number): string {
 
 export async function loadPdfDocument(data: Uint8Array): Promise<PdfDocument> {
   const pdfium = await getPdfium();
+  const heap = getHeap(pdfium);
   const filePtr = pdfium.pdfium.wasmExports.malloc(data.length);
-  pdfium.pdfium.HEAPU8.set(data, filePtr);
+  heap.set(data, filePtr);
 
-  const docPtr = pdfium.FPDF_LoadMemDocument(filePtr, data.length, 0);
+  const docPtr = pdfium.FPDF_LoadMemDocument(filePtr, data.length, '');
   if (!docPtr) {
     const error = pdfium.FPDF_GetLastError();
     pdfium.pdfium.wasmExports.free(filePtr);
@@ -136,9 +145,10 @@ export async function loadPdfDocument(data: Uint8Array): Promise<PdfDocument> {
               if (!bufferPtr) throw new Error(`Could not read page ${pageNumber} bitmap.`);
 
               const byteLength = width * height * 4;
+              const currentHeap = getHeap(pdfium);
               const pixels = new Uint8Array(
-                pdfium.pdfium.HEAPU8.buffer,
-                pdfium.pdfium.HEAPU8.byteOffset + bufferPtr,
+                currentHeap.buffer,
+                currentHeap.byteOffset + bufferPtr,
                 byteLength,
               ).slice();
 

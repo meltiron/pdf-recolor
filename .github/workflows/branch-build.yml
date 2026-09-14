@@ -23,6 +23,51 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Smoke-test scanned CCITT PDF rendering
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { init } from '@embedpdf/pdfium';
+
+          const fixture = 'JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAyNDAgMTYwXSAvUmVzb3VyY2VzIDw8IC9YT2JqZWN0IDw8IC9JbTAgNCAwIFIgPj4gPj4gL0NvbnRlbnRzIDUgMCBSID4+CmVuZG9iago0IDAgb2JqCjw8IC9UeXBlIC9YT2JqZWN0IC9TdWJ0eXBlIC9JbWFnZSAvV2lkdGggMjQwIC9IZWlnaHQgMTYwIC9Db2xvclNwYWNlIC9EZXZpY2VHcmF5IC9CaXRzUGVyQ29tcG9uZW50IDEgL0ZpbHRlciAvQ0NJVFRGYXhEZWNvZGUgL0RlY29kZVBhcm1zIDw8IC9LIC0xIC9Db2x1bW5zIDI0MCAvUm93cyAxNjAgL0JsYWNrSXMxIHRydWUgPj4gL0xlbmd0aCA3OSA+PgpzdHJlYW0KJqGSDJ////////IaJEn///j////5DRIk///8f////IaJEn///j////5DRIk///8f////IaJEn///j////5DRv///////x///////+ACACAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL0xlbmd0aCAzMSA+PgpzdHJlYW0KcQoyNDAgMCAwIDE2MCAwIDAgY20KL0ltMCBEbwpRCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAwNjQgMDAwMDAgbiAKMDAwMDAwMDEyMSAwMDAwMCBuIAowMDAwMDAwMjUxIDAwMDAwIG4gCjAwMDAwMDA1NjUgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo2NDUKJSVFT0YK';
+          const pdfBytes = Buffer.from(fixture, 'base64');
+          const rawWasm = readFileSync('node_modules/@embedpdf/pdfium/dist/pdfium.wasm');
+          const wasmBinary = rawWasm.buffer.slice(rawWasm.byteOffset, rawWasm.byteOffset + rawWasm.byteLength);
+          const pdfium = await init({ wasmBinary, thisProgram: 'pdf-recolor-test' });
+          pdfium.PDFiumExt_Init();
+
+          const filePtr = pdfium.pdfium.wasmExports.malloc(pdfBytes.length);
+          pdfium.pdfium.HEAPU8.set(pdfBytes, filePtr);
+          const doc = pdfium.FPDF_LoadMemDocument(filePtr, pdfBytes.length, '');
+          if (!doc) throw new Error(`Fixture failed to open: ${pdfium.FPDF_GetLastError()}`);
+
+          const page = pdfium.FPDF_LoadPage(doc, 0);
+          if (!page) throw new Error('Fixture page failed to open');
+          const width = Math.ceil(pdfium.FPDF_GetPageWidthF(page));
+          const height = Math.ceil(pdfium.FPDF_GetPageHeightF(page));
+          const bitmap = pdfium.FPDFBitmap_Create(width, height, 0);
+          if (!bitmap) throw new Error('Fixture bitmap allocation failed');
+
+          try {
+            pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff);
+            pdfium.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, 0x10);
+            const bufferPtr = pdfium.FPDFBitmap_GetBuffer(bitmap);
+            const rgba = new Uint8Array(pdfium.pdfium.HEAPU8.buffer, bufferPtr, width * height * 4);
+            let darkPixels = 0;
+            for (let i = 0; i < rgba.length; i += 4) {
+              if (rgba[i] < 128 && rgba[i + 1] < 128 && rgba[i + 2] < 128) darkPixels += 1;
+            }
+            if (darkPixels < 100) throw new Error(`CCITT image rendered blank (${darkPixels} dark pixels)`);
+            console.log(`CCITT render OK: ${darkPixels} dark pixels`);
+          } finally {
+            pdfium.FPDFBitmap_Destroy(bitmap);
+            pdfium.FPDF_ClosePage(page);
+            pdfium.FPDF_CloseDocument(doc);
+            pdfium.pdfium.wasmExports.free(filePtr);
+          }
+          NODE
+
       - name: Build
         run: npm run build
 

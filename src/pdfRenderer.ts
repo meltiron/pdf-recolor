@@ -29,6 +29,7 @@ export type PdfDocument = {
   destroy(): Promise<void>;
 };
 
+const RENDER_FLAGS = 0x01 | 0x10; // annotations + RGBA byte order
 let pdfiumPromise: Promise<WrappedPdfiumModule> | null = null;
 
 async function getPdfium(): Promise<WrappedPdfiumModule> {
@@ -72,9 +73,9 @@ function pdfErrorMessage(code: number): string {
 
 export async function loadPdfDocument(data: Uint8Array): Promise<PdfDocument> {
   const pdfium = await getPdfium();
-  const heap = getHeap(pdfium);
   const filePtr = pdfium.pdfium.wasmExports.malloc(data.length);
-  heap.set(data, filePtr);
+  // malloc can grow WASM memory, so fetch the heap view after allocating.
+  getHeap(pdfium).set(data, filePtr);
 
   const docPtr = pdfium.FPDF_LoadMemDocument(filePtr, data.length, '');
   if (!docPtr) {
@@ -100,6 +101,7 @@ export async function loadPdfDocument(data: Uint8Array): Promise<PdfDocument> {
       if (!pagePtr) throw new Error(`Could not open page ${pageNumber}.`);
       openPages.add(pagePtr);
 
+      // PDFium reports the effective display dimensions, including /Rotate.
       const pageWidth = pdfium.FPDF_GetPageWidthF(pagePtr);
       const pageHeight = pdfium.FPDF_GetPageHeightF(pagePtr);
       let cleaned = false;
@@ -125,7 +127,7 @@ export async function loadPdfDocument(data: Uint8Array): Promise<PdfDocument> {
 
             const width = Math.max(1, Math.ceil(viewport.width));
             const height = Math.max(1, Math.ceil(viewport.height));
-            const bitmapPtr = pdfium.FPDFBitmap_Create(width, height, 0);
+            const bitmapPtr = pdfium.FPDFBitmap_Create(width, height, 1);
             if (!bitmapPtr) throw new Error(`Could not allocate page ${pageNumber} bitmap.`);
 
             try {
@@ -138,27 +140,26 @@ export async function loadPdfDocument(data: Uint8Array): Promise<PdfDocument> {
                 width,
                 height,
                 0,
-                0x10,
+                RENDER_FLAGS,
               );
 
               const bufferPtr = pdfium.FPDFBitmap_GetBuffer(bitmapPtr);
               if (!bufferPtr) throw new Error(`Could not read page ${pageNumber} bitmap.`);
 
-              const byteLength = width * height * 4;
-              const currentHeap = getHeap(pdfium);
-              const pixels = new Uint8Array(
-                currentHeap.buffer,
-                currentHeap.byteOffset + bufferPtr,
-                byteLength,
-              ).slice();
+              const stride = pdfium.FPDFBitmap_GetStride(bitmapPtr);
+              const heap = getHeap(pdfium);
+              const pixels = new Uint8ClampedArray(width * height * 4);
+              for (let y = 0; y < height; y += 1) {
+                const sourceStart = bufferPtr + y * stride;
+                pixels.set(
+                  heap.subarray(sourceStart, sourceStart + width * 4),
+                  y * width * 4,
+                );
+              }
 
               canvas.width = width;
               canvas.height = height;
-              canvasContext.putImageData(
-                new ImageData(new Uint8ClampedArray(pixels.buffer), width, height),
-                0,
-                0,
-              );
+              canvasContext.putImageData(new ImageData(pixels, width, height), 0, 0);
             } catch (error) {
               cleanup();
               throw error;

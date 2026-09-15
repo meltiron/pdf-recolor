@@ -1,6 +1,6 @@
 # PDF Recolor
 
-A static, privacy-friendly PDF color converter built with Vite, TypeScript, PDF.js, and pdf-lib.
+A static, privacy-friendly PDF color converter built with Vite, TypeScript, PDFium, and pdf-lib.
 
 PDF Recolor lets you choose new paper and foreground colors, preview the result page-by-page, and export a recolored PDF without uploading the source document to a server.
 
@@ -14,6 +14,7 @@ PDF Recolor lets you choose new paper and foreground colors, preview the result 
 - Built-in color presets:
   - Original
   - Warm Paper
+  - Warm Light
   - Sepia
   - Soft Gray
   - Cool Paper
@@ -27,7 +28,7 @@ PDF Recolor lets you choose new paper and foreground colors, preview the result 
 
 ## How it works
 
-1. PDF.js opens and renders the PDF locally in the browser.
+1. PDFium opens and renders the PDF locally in the browser.
 2. The app analyzes the rendered pixels. It does not currently identify PDF text objects directly; the UI's "text color" control primarily affects dark, neutral foreground pixels.
 3. Neutral pixels are remapped between the chosen foreground and background colors, while clearly colored pixels are left alone where possible.
 4. The preview uses the same recolor function as export, so the exported result matches what you preview.

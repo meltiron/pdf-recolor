@@ -1,0 +1,52 @@
+name: Increase PDF export resolution
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.event.head_commit.message == 'chore: prepare higher-resolution PDF export'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Increase export scale to 4x
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main.ts')
+          text = path.read_text()
+          old = 'const scale = Math.min(2, safeScale);'
+          new = 'const scale = Math.min(4, safeScale);'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected exactly one export scale match, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Build
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Commit change and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/increase-export-resolution.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.ts .github/workflows/increase-export-resolution.yml
+          git commit -m "Increase PDF export resolution to 4x"
+          git push origin HEAD:main

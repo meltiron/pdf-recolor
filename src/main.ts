@@ -438,7 +438,7 @@ async function convertPdf(): Promise<void> {
       const safeScale = Math.sqrt(
         maxPixels / Math.max(1, baseViewport.width * baseViewport.height),
       );
-      const scale = Math.min(2, safeScale);
+      const scale = Math.min(4, safeScale);
       const viewport = sourcePage.getViewport({ scale });
       const context = renderCanvas.getContext('2d', { willReadFrequently: true });
       if (!context) throw new Error('Canvas is not available in this browser.');

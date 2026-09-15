@@ -2,6 +2,7 @@ import './style.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PDFDocument } from 'pdf-lib';
+import UPNG from '@upng/upng-js';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
   normalizeHex,
@@ -386,15 +387,6 @@ function setStatus(message: string, isError = false): void {
   statusElement.classList.toggle('is-error', isError);
 }
 
-function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error('Could not encode a PDF page.'));
-    }, 'image/png');
-  });
-}
-
 function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -454,10 +446,15 @@ async function convertPdf(): Promise<void> {
       }).promise;
 
       const source = context.getImageData(0, 0, renderCanvas.width, renderCanvas.height);
-      context.putImageData(recolorImageData(source, settings), 0, 0);
-
-      const pngBlob = await canvasToPng(renderCanvas);
-      const png = await output.embedPng(await pngBlob.arrayBuffer());
+      const recolored = recolorImageData(source, settings);
+      const rgba = recolored.data.slice();
+      const pngBytes = UPNG.encode(
+        [rgba.buffer],
+        renderCanvas.width,
+        renderCanvas.height,
+        16,
+      );
+      const png = await output.embedPng(pngBytes);
       const outputPage = output.addPage([baseViewport.width, baseViewport.height]);
       outputPage.drawImage(png, {
         x: 0,

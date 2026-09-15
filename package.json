@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@embedpdf/pdfium": "2.15.0",
+    "@upng/upng-js": "2.2.2",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.3.289"
   },

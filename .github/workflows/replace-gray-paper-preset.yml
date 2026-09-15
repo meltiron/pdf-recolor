@@ -1,0 +1,45 @@
+name: Replace Gray Paper preset
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.event.head_commit.message == 'chore: prepare Gray Paper preset update'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Replace preset and clean up workflow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          main = Path('src/main.ts')
+          text = main.read_text()
+          old = "  { name: 'Warm Light', background: '#F4ECD8', text: '#D6D6D6' },"
+          new = "  { name: 'Gray Paper', background: '#D6D6D6', text: '#1A1A1A' },"
+          if old not in text:
+              raise SystemExit('Expected Warm Light preset was not found')
+          main.write_text(text.replace(old, new, 1))
+
+          readme = Path('README.md')
+          readme_text = readme.read_text()
+          if '  - Warm Light\n' not in readme_text:
+              raise SystemExit('Expected Warm Light README entry was not found')
+          readme.write_text(readme_text.replace('  - Warm Light\n', '  - Gray Paper\n', 1))
+          PY
+
+          rm .github/workflows/replace-gray-paper-preset.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.ts README.md .github/workflows/replace-gray-paper-preset.yml
+          git commit -m "Replace Warm Light preset with Gray Paper"
+          git push origin HEAD:main

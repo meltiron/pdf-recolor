@@ -14,7 +14,7 @@ PDF Recolor lets you choose new paper and foreground colors, preview the result 
 - Built-in color presets:
   - Original
   - Warm Paper
-  - Warm Light
+  - Gray Paper
   - Sepia
   - Soft Gray
   - Cool Paper

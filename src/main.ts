@@ -20,6 +20,7 @@ type ThemePreset = {
 const presets: ThemePreset[] = [
   { name: 'Original', background: '#FFFFFF', text: '#000000' },
   { name: 'Warm Paper', background: '#F4ECD8', text: '#3E382F' },
+  { name: 'Warm Light', background: '#F4ECD8', text: '#D6D6D6' },
   { name: 'Sepia', background: '#E8D8B5', text: '#4A3B2A' },
   { name: 'Soft Gray', background: '#E8E8E8', text: '#333333' },
   { name: 'Cool Paper', background: '#E9EEF2', text: '#263238' },

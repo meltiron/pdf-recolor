@@ -1,0 +1,42 @@
+name: Add Warm Light preset
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/add-warm-light-preset.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-preset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Add preset and remove temporary workflow
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+
+          const path = 'src/main.ts';
+          const source = readFileSync(path, 'utf8');
+          const target = "  { name: 'Warm Paper', background: '#F4ECD8', text: '#3E382F' },";
+          const addition = "  { name: 'Warm Light', background: '#F4ECD8', text: '#D6D6D6' },";
+
+          if (!source.includes(target)) throw new Error('Warm Paper preset was not found');
+          if (source.includes(addition)) throw new Error('Warm Light preset already exists');
+
+          writeFileSync(path, source.replace(target, `${target}\n${addition}`));
+          unlinkSync('.github/workflows/add-warm-light-preset.yml');
+          NODE
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.ts .github/workflows/add-warm-light-preset.yml
+          git commit -m "Add Warm Light color preset"
+          git push

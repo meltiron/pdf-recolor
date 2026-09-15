@@ -24,6 +24,7 @@ PDF Recolor lets you choose new paper and foreground colors, preview the result 
 - Adjustable dark/light detection points
 - Client-side conversion only
 - One-page-at-a-time export to limit peak memory use
+- Export rendering up to 4x scale (about 288 DPI) for sharper text, subject to the page pixel safety limit
 - Automatic deployment to GitHub Pages from `main`
 
 ## How it works

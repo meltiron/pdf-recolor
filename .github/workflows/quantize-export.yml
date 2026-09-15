@@ -50,14 +50,6 @@ jobs:
           main.write_text(text)
 
           Path('src/upng-js.d.ts').write_text('''declare module '@upng/upng-js' {\n  type BufferLike = ArrayBuffer | SharedArrayBuffer;\n\n  const UPNG: {\n    encode(\n      images: BufferLike[],\n      width: number,\n      height: number,\n      colorCount: number,\n      delays?: number[],\n    ): ArrayBuffer;\n  };\n\n  export default UPNG;\n}\n''')
-
-          readme = Path('README.md')
-          readme_text = readme.read_text()
-          needle = '- Higher-quality export rendering up to 4× (~288 DPI), with a 24 MP per-page safety limit\n'
-          replacement = needle + '- 16-color indexed PNG quantization for smaller high-resolution exports\n'
-          if needle not in readme_text:
-              raise SystemExit('Expected 4x export README line not found')
-          readme.write_text(readme_text.replace(needle, replacement, 1))
           PY
 
       - name: Build
@@ -69,6 +61,6 @@ jobs:
           rm .github/workflows/quantize-export.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json src/main.ts src/upng-js.d.ts README.md .github/workflows/quantize-export.yml
+          git add package.json package-lock.json src/main.ts src/upng-js.d.ts .github/workflows/quantize-export.yml
           git commit -m "Use 16-color indexed PNGs for PDF export"
           git push origin HEAD:feat/indexed-png-export

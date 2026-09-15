@@ -5,6 +5,7 @@ import { PDFDocument } from 'pdf-lib';
 import UPNG from '@upng/upng-js';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
+  hexToRgb,
   normalizeHex,
   recolorImageData,
   type RecolorSettings,
@@ -403,7 +404,7 @@ function outputFileName(fileName: string): string {
   return `${withoutExtension}-recolored.pdf`;
 }
 
-function chooseExportColorCount(image: ImageData): 4 | 64 | 128 | 256 {
+function chooseExportColorCount(image: ImageData): 2 | 64 | 128 | 256 {
   const { data, width, height } = image;
   const pixelCount = Math.max(1, width * height);
   const sampleStep = Math.max(1, Math.ceil(Math.sqrt(pixelCount / 100_000)));
@@ -452,7 +453,7 @@ function chooseExportColorCount(image: ImageData): 4 | 64 | 128 | 256 {
     }
   }
 
-  if (samples === 0) return 4;
+  if (samples === 0) return 2;
 
   const coloredFraction = colored / samples;
   const midtoneFraction = neutralMidtones / samples;
@@ -480,7 +481,7 @@ function chooseExportColorCount(image: ImageData): 4 | 64 | 128 | 256 {
   if (isEffectivelyNeutral) {
     const looksLikeTextOrLineArt =
       midtoneFraction < 0.08 && maxTileMidtoneFraction < 0.15;
-    return looksLikeTextOrLineArt ? 4 : 64;
+    return looksLikeTextOrLineArt ? 2 : 64;
   }
 
   const looksPhotoLike =
@@ -489,6 +490,36 @@ function chooseExportColorCount(image: ImageData): 4 | 64 | 128 | 256 {
     (maxTileColoredFraction >= 0.12 && maxTileColorBins >= 32);
 
   return looksPhotoLike ? 256 : 128;
+}
+
+function recolorImageDataTwoTone(
+  source: ImageData,
+  settings: RecolorSettings,
+): ImageData {
+  const output = new ImageData(
+    new Uint8ClampedArray(source.data),
+    source.width,
+    source.height,
+  );
+  const data = output.data;
+  const background = hexToRgb(settings.background);
+  const text = hexToRgb(settings.text);
+  const darkPoint = Math.max(0, Math.min(254, settings.darkPoint));
+  const lightPoint = Math.max(darkPoint + 1, Math.min(255, settings.lightPoint));
+  const threshold = darkPoint + (lightPoint - darkPoint) / 2;
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue;
+
+    const luminance =
+      0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+    const color = luminance <= threshold ? text : background;
+    data[i] = color[0];
+    data[i + 1] = color[1];
+    data[i + 2] = color[2];
+  }
+
+  return output;
 }
 
 async function yieldToBrowser(): Promise<void> {
@@ -535,7 +566,10 @@ async function convertPdf(): Promise<void> {
 
       const source = context.getImageData(0, 0, renderCanvas.width, renderCanvas.height);
       const colorCount = chooseExportColorCount(source);
-      const recolored = recolorImageData(source, settings);
+      const recolored =
+        colorCount === 2
+          ? recolorImageDataTwoTone(source, settings)
+          : recolorImageData(source, settings);
       const rgba = recolored.data.slice();
       const pngBytes = UPNG.encode(
         [rgba.buffer],

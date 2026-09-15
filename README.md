@@ -25,7 +25,7 @@ PDF Recolor lets you choose new paper and foreground colors, preview the result 
 - Client-side conversion only
 - One-page-at-a-time export to limit peak memory use
 - Export rendering up to 4x scale (about 288 DPI) for sharper text, subject to the page pixel safety limit
-- Adaptive export palettes: 4 colors for text/line art, 64 for grayscale imagery, 128 for flat color graphics, and 256 for photo-like color content
+- Adaptive export palettes: exact 2-color thresholding for text/line art, 64 colors for grayscale imagery, 128 for flat color graphics, and 256 for photo-like color content
 - Automatic deployment to GitHub Pages from `main`
 
 ## How it works

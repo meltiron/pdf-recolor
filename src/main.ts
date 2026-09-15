@@ -403,6 +403,94 @@ function outputFileName(fileName: string): string {
   return `${withoutExtension}-recolored.pdf`;
 }
 
+function chooseExportColorCount(image: ImageData): 4 | 64 | 128 | 256 {
+  const { data, width, height } = image;
+  const pixelCount = Math.max(1, width * height);
+  const sampleStep = Math.max(1, Math.ceil(Math.sqrt(pixelCount / 100_000)));
+  const tileColumns = 8;
+  const tileRows = 8;
+  const tileCount = tileColumns * tileRows;
+  const tileSamples = new Uint32Array(tileCount);
+  const tileColored = new Uint32Array(tileCount);
+  const tileMidtones = new Uint32Array(tileCount);
+  const tileColors = Array.from({ length: tileCount }, () => new Set<number>());
+  const pageColors = new Set<number>();
+
+  let samples = 0;
+  let colored = 0;
+  let neutralMidtones = 0;
+
+  for (let y = 0; y < height; y += sampleStep) {
+    const tileY = Math.min(tileRows - 1, Math.floor((y / Math.max(1, height)) * tileRows));
+    for (let x = 0; x < width; x += sampleStep) {
+      const index = (y * width + x) * 4;
+      if (data[index + 3] < 32) continue;
+
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const maxChannel = Math.max(r, g, b);
+      const minChannel = Math.min(r, g, b);
+      const chroma = maxChannel - minChannel;
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const tileX = Math.min(tileColumns - 1, Math.floor((x / Math.max(1, width)) * tileColumns));
+      const tileIndex = tileY * tileColumns + tileX;
+
+      samples += 1;
+      tileSamples[tileIndex] += 1;
+
+      if (chroma > 34) {
+        colored += 1;
+        tileColored[tileIndex] += 1;
+        const coarseColor = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+        pageColors.add(coarseColor);
+        tileColors[tileIndex].add(coarseColor);
+      } else if (luminance > 32 && luminance < 223) {
+        neutralMidtones += 1;
+        tileMidtones[tileIndex] += 1;
+      }
+    }
+  }
+
+  if (samples === 0) return 4;
+
+  const coloredFraction = colored / samples;
+  const midtoneFraction = neutralMidtones / samples;
+  let maxTileColoredFraction = 0;
+  let maxTileMidtoneFraction = 0;
+  let maxTileColorBins = 0;
+
+  for (let tileIndex = 0; tileIndex < tileCount; tileIndex += 1) {
+    const tileSampleCount = tileSamples[tileIndex];
+    if (tileSampleCount === 0) continue;
+    maxTileColoredFraction = Math.max(
+      maxTileColoredFraction,
+      tileColored[tileIndex] / tileSampleCount,
+    );
+    maxTileMidtoneFraction = Math.max(
+      maxTileMidtoneFraction,
+      tileMidtones[tileIndex] / tileSampleCount,
+    );
+    maxTileColorBins = Math.max(maxTileColorBins, tileColors[tileIndex].size);
+  }
+
+  const isEffectivelyNeutral =
+    coloredFraction < 0.002 && maxTileColoredFraction < 0.01;
+
+  if (isEffectivelyNeutral) {
+    const looksLikeTextOrLineArt =
+      midtoneFraction < 0.08 && maxTileMidtoneFraction < 0.15;
+    return looksLikeTextOrLineArt ? 4 : 64;
+  }
+
+  const looksPhotoLike =
+    maxTileColorBins >= 48 ||
+    pageColors.size >= 128 ||
+    (maxTileColoredFraction >= 0.12 && maxTileColorBins >= 32);
+
+  return looksPhotoLike ? 256 : 128;
+}
+
 async function yieldToBrowser(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
@@ -446,13 +534,14 @@ async function convertPdf(): Promise<void> {
       }).promise;
 
       const source = context.getImageData(0, 0, renderCanvas.width, renderCanvas.height);
+      const colorCount = chooseExportColorCount(source);
       const recolored = recolorImageData(source, settings);
       const rgba = recolored.data.slice();
       const pngBytes = UPNG.encode(
         [rgba.buffer],
         renderCanvas.width,
         renderCanvas.height,
-        16,
+        colorCount,
       );
       const png = await output.embedPng(pngBytes);
       const outputPage = output.addPage([baseViewport.width, baseViewport.height]);
